@@ -128,7 +128,11 @@ async def _call_claude(problem: str, correction: str | None = None) -> str:
 
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(ANTHROPIC_URL, json=payload, headers=headers)
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Anthropic API error {resp.status_code}: {resp.text}",
+            )
         data = resp.json()
 
     text_blocks = [b["text"] for b in data.get("content", []) if b.get("type") == "text"]
