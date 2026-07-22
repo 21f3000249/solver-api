@@ -32,7 +32,7 @@ import httpx
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 MODEL = "claude-sonnet-5"
-MAX_RETRIES = 3
+MAX_RETRIES = 2
 
 app = FastAPI(title="Word-Problem Solver API")
 
@@ -119,6 +119,7 @@ async def _call_claude(problem: str, correction: str | None = None) -> str:
         "max_tokens": 1000,
         "system": SYSTEM_PROMPT,
         "messages": _build_messages(problem, correction),
+        "output_config": {"effort": "low"},
     }
     headers = {
         "x-api-key": ANTHROPIC_API_KEY,
@@ -126,7 +127,7 @@ async def _call_claude(problem: str, correction: str | None = None) -> str:
         "content-type": "application/json",
     }
 
-    async with httpx.AsyncClient(timeout=60) as client:
+    async with httpx.AsyncClient(timeout=25) as client:
         resp = await client.post(ANTHROPIC_URL, json=payload, headers=headers)
         if resp.status_code >= 400:
             raise HTTPException(
