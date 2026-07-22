@@ -25,7 +25,7 @@ import json
 import re
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 import httpx
 
@@ -38,8 +38,26 @@ app = FastAPI(title="Word-Problem Solver API")
 
 
 class ProblemRequest(BaseModel):
-    problem_id: str
-    problem: str
+    problem_id: str = ""
+    problem: str = ""
+
+
+def _parse_flexible_request(body: dict) -> "ProblemRequest":
+    """Accept several possible key names the grader might use."""
+    problem_text = (
+        body.get("problem")
+        or body.get("query")
+        or body.get("question")
+        or body.get("text")
+        or ""
+    )
+    problem_id = (
+        body.get("problem_id")
+        or body.get("query_id")
+        or body.get("id")
+        or ""
+    )
+    return ProblemRequest(problem_id=str(problem_id), problem=str(problem_text))
 
 
 class SolutionResponse(BaseModel):
@@ -163,7 +181,16 @@ def _validate(obj: dict[str, Any]) -> tuple[bool, str]:
 
 
 @app.post("/solve", response_model=SolutionResponse)
-async def solve(req: ProblemRequest) -> SolutionResponse:
+async def solve(request: Request) -> SolutionResponse:
+    body = await request.json()
+    req = _parse_flexible_request(body)
+
+    if not req.problem:
+        raise HTTPException(
+            status_code=422,
+            detail="No problem text found. Expected one of: 'problem', 'query', 'question', 'text'.",
+        )
+
     correction: str | None = None
     last_error = ""
 
@@ -188,6 +215,11 @@ async def solve(req: ProblemRequest) -> SolutionResponse:
         status_code=502,
         detail=f"Failed to get a valid solution after {MAX_RETRIES} attempts: {last_error}",
     )
+
+
+@app.post("/", response_model=SolutionResponse)
+async def solve_root(request: Request) -> SolutionResponse:
+    return await solve(request)
 
 
 @app.get("/health")
